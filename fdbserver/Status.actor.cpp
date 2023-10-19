@@ -285,7 +285,7 @@ static JsonBuilderObject machineStatusFetcher(WorkerEvents mMetrics,
 	// map from machine networkAddress to datacenter ID
 	std::map<NetworkAddress, std::string> dcIds;
 	std::map<NetworkAddress, LocalityData> locality;
-	std::map<std::string, bool> notExcludedMap;
+	std::map<std::string, bool> excludedMap;
 	std::map<std::string, int32_t> workerContribMap;
 	std::map<std::string, JsonBuilderObject> machineJsonMap;
 
@@ -351,7 +351,7 @@ static JsonBuilderObject machineStatusFetcher(WorkerEvents mMetrics,
 				statusObj["network"] = networkObj;
 
 				if (configuration.present()) {
-					notExcludedMap[machineId] =
+					excludedMap[machineId] =
 					    true; // Will be set to false below if this or any later process is not excluded
 				}
 
@@ -363,14 +363,23 @@ static JsonBuilderObject machineStatusFetcher(WorkerEvents mMetrics,
 			NetworkAddressList tempList;
 			tempList.address = it->first;
 			bool excludedServer = true;
-			bool excludedLocality = true;
-			if (configuration.present() && !configuration.get().isExcludedServer(tempList, LocalityData()))
-				excludedServer = false;
-			if (locality.count(it->first) && configuration.present() &&
-			    configuration.get().isMachineExcluded(locality[it->first]))
-				excludedLocality = true;
+			if (configuration.present()) {
+				// Check if the locality data is present and if so, make use of it in the verification if a server
+				// is excluded.
+				auto localityData = LocalityData();
+				if (locality.count(it->first)) {
+					localityData = locality[it->first];
+				}
 
-			notExcludedMap[machineId] = excludedServer || excludedLocality;
+				// The isExcludedServer method already contains a check for the excluded localities.
+				excludedServer = configuration.get().isExcludedServer(tempList, localityData);
+			}
+
+			// If any server is not excluded, set the overall exclusion status
+			// of the machine to false.
+			if (!excludedServer) {
+				excludedMap[machineId] = false;
+			}
 			workerContribMap[machineId]++;
 		} catch (Error&) {
 			++failed;
@@ -381,7 +390,7 @@ static JsonBuilderObject machineStatusFetcher(WorkerEvents mMetrics,
 	for (auto& mapPair : machineJsonMap) {
 		auto& machineId = mapPair.first;
 		auto& jsonItem = machineJsonMap[machineId];
-		jsonItem["excluded"] = notExcludedMap[machineId];
+		jsonItem["excluded"] = excludedMap[machineId];
 		jsonItem["contributing_workers"] = workerContribMap[machineId];
 		machineMap[machineId] = jsonItem;
 	}
