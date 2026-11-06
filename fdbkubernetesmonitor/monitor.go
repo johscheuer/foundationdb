@@ -170,6 +170,7 @@ func startMonitor(ctx context.Context, logger logr.Logger, configFile string, cu
 	reg.MustRegister(collectors.NewGoCollector())
 	monitorMetrics := registerMetrics(reg)
 	mon.metrics = monitorMetrics
+	go func() { mon.watchStagedVersions(ctx) }()
 	promHandler := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
 
 	// Add Prometheus support

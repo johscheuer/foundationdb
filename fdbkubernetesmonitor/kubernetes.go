@@ -231,6 +231,13 @@ func (podClient *kubernetesClient) updateAnnotations(ctx context.Context, monito
 		retrieveEnvironmentVariables(monitor, argument, environment)
 	}
 	environment["BINARY_DIR"] = path.Dir(monitor.activeConfiguration.BinaryPath)
+	stagedVersions, err := getStagedVersions()
+	if err != nil {
+		podClient.Logger.Error(err, "Could not list staged versions", "sharedBinaryDir", sharedBinaryDir)
+	} else {
+		environment[api.StagedVersionsKey] = formatStagedVersions(stagedVersions)
+	}
+
 	jsonEnvironment, err := json.Marshal(environment)
 	if err != nil {
 		return err
